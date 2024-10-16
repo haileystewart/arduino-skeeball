@@ -1,39 +1,115 @@
-int sensorPin1 = A0;  // Simulated sensor pin for target 1
-int sensorPin2 = A1;  // Simulated sensor pin for target 2
-int ledPin1 = 13;     // Simulated LED for target 1
-int ledPin2 = 12;     // Simulated LED for target 2
-int buzzerPin = 11;   // Simulated buzzer
+#include <MD_MAX72xx.h>
+#include <SPI.h>
 
-void setup() {
-  pinMode(sensorPin1, INPUT);  // Initialize sensors
-  pinMode(sensorPin2, INPUT);
-  pinMode(ledPin1, OUTPUT);    // Initialize LEDs
-  pinMode(ledPin2, OUTPUT);
-  pinMode(buzzerPin, OUTPUT);  // Initialize buzzer
+// Define the number of devices we have in the chain
+#define MAX_DEVICES 4
 
-  Serial.begin(9600);  // Start serial communication with Raspberry Pi
+// Define pin numbers for the LED matrix
+#define DATA_PIN    11  // MOSI
+#define CLK_PIN     13  // SCK
+#define CS_PIN      10  // SS
+
+MD_MAX72XX matrix = MD_MAX72XX(MD_MAX72XX::FC16_HW, DATA_PIN, CLK_PIN, CS_PIN, MAX_DEVICES);
+
+// Define a single trig pin for all sensors
+const int triggerPin = 2;
+
+// Define separate echo pins for each sensor
+const int echoPin1 = 3;
+const int echoPin2 = 4;
+const int echoPin3 = 5;
+const int echoPin4 = 6;
+
+int score = 0;
+
+void triggerSensors() 
+{
+  digitalWrite(triggerPin, LOW);
+  delayMicroseconds(2);
+
+  digitalWrite(triggerPin, HIGH);
+  delayMicroseconds(10);
+
+  digitalWrite(triggerPin, LOW);
 }
 
-void loop() {
-  // Simulate sensor detection with random values for testing
-  int sensor1State = random(0, 2);  // Simulate ball passing through target 1
-  int sensor2State = random(0, 2);  // Simulate ball passing through target 2
+int getDistance(int echoPin) 
+{
+  long duration = pulseIn(echoPin, HIGH);
+  int distance = duration * 0.034 / 2;
+  return distance;
+}
 
-  if (sensor1State == 1) {
-    digitalWrite(ledPin1, HIGH);   // Light up LED 1
-    tone(buzzerPin, 1000, 200);    // Simulate buzzer sound
-    Serial.println("Target 1 Hit!");  // Send score update to Raspberry Pi
-    delay(1000);
-    digitalWrite(ledPin1, LOW);
+void displayScore(int score) 
+{
+  char scoreStr[5];
+  snprintf(scoreStr, sizeof(scoreStr), "%4d", score);
+  matrix.clear();
+
+  for (int i = 0; i < 4; i++) 
+    matrix.setChar(i, scoreStr[i]);
+
+  matrix.update();
+}
+
+void setup() 
+{
+  Serial.begin(115200);
+
+  // Initialize the single trigger pin
+  pinMode(triggerPin, OUTPUT);
+
+  // Initialize pins for each sensor's echo
+  pinMode(echoPin1, INPUT);
+  pinMode(echoPin2, INPUT);
+  pinMode(echoPin3, INPUT);
+  pinMode(echoPin4, INPUT);
+
+  // Initialize the LED matrix
+  matrix.begin();
+  matrix.clear();
+  matrix.update();
+}
+
+void loop() 
+{
+  // Trigger all sensors at once
+  triggerSensors();
+
+  // Read distances from each sensor
+  int distance1 = getDistance(echoPin1);
+  int distance2 = getDistance(echoPin2);
+  int distance3 = getDistance(echoPin3);
+  int distance4 = getDistance(echoPin4);
+
+  // Score based on distances
+  if (distance1 < 5) 
+  {
+    Serial.println("Score 10 points");
+    score += 10;
+    displayScore(score);
   }
 
-  if (sensor2State == 1) {
-    digitalWrite(ledPin2, HIGH);   // Light up LED 2
-    tone(buzzerPin, 1500, 200);    // Simulate buzzer sound
-    Serial.println("Target 2 Hit!");  // Send score update to Raspberry Pi
-    delay(1000);
-    digitalWrite(ledPin2, LOW);
+  if (distance2 < 5) 
+  {
+    Serial.println("Score 20 points");
+    score += 20;
+    displayScore(score);
   }
 
-  delay(1000);  // Delay between simulated readings
+  if (distance3 < 5) 
+  {
+    Serial.println("Score 30 points");
+    score += 30;
+    displayScore(score);
+  }
+
+  if (distance4 < 5) 
+  {
+    Serial.println("Score 40 points");
+    score += 40;
+    displayScore(score);
+  }
+
+  delay(100);  // Adjust as necessary
 }
