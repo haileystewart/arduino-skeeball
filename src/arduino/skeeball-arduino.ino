@@ -1,11 +1,14 @@
 #include <MD_MAX72xx.h>
 #include <SPI.h>
 
-#define HARDWARE_TYPE       MD_MAX72XX::FC16_HW
-#define LED_MODULES         4
 #define ULTRASONIC_SENSORS  2
+
+// led matrix definitions
+#define HARDWARE_TYPE       MD_MAX72XX::FC16_HW
+#define LED_MODULES         4   // there are 4 8x8 modules
+#define LED_BRIGHTNESS      5   // brightness level is 0..15
+#define CS_PIN              10
 #define DATA_PIN            11
-#define CS_PIN              12
 #define CLK_PIN             13
 
 struct skeeballSensor
@@ -24,6 +27,7 @@ int score         = 0;
 int balls         = 9;
 int gameOverCount = 0;
 
+// binary representation of 0-9 characters
 const uint8_t numbers[10][8] = 
 {
     {0b00000000, 0b11111111, 0b10000001, 0b10000001, 0b10000001, 0b10000001, 0b11111111, 0b00000000}, // 0
@@ -38,12 +42,18 @@ const uint8_t numbers[10][8] =
     {0b00000000, 0b10001111, 0b10001001, 0b10001001, 0b10001001, 0b10001001, 0b11111111, 0b00000000}  // 9
 };
 
+// list of ultrasonic sensors
 skeeballSensor skeeballSensors[ULTRASONIC_SENSORS] =
 {
-  { A0, 2, 10, 3, 30, 0 },
-  { A1, 3, 20, 3, 30, 0 }
+  { A5, 2, 10, 3, 30, 0 },
+  { A4, 3, 20, 3, 30, 0 },
+//  { A3, 4, 30, 3, 30, 0 },
+//  { A2, 5, 40, 3, 30, 0 },
+//  { A1, 6, 50, 3, 30, 0 },
+//  { A0, 7, 60, 3, 30, 0 }
 };
 
+// display 0-9 number at position
 void displayNum(int position, int num)
 {
   position *= 8;
@@ -52,6 +62,7 @@ void displayNum(int position, int num)
     matrix.setColumn(31-(position + i), numbers[num][i]);
 }
 
+// display character on led at position
 void displayChar(int position, char c) 
 {
   uint8_t charBuffer[8];  // Buffer to hold the character columns
@@ -68,6 +79,7 @@ void displayChar(int position, char c)
   }
 }
 
+// display string on led
 void displayString(String data)
 {
   uint8_t p = 0;
@@ -78,11 +90,13 @@ void displayString(String data)
   }
 }
 
+// display score
 void displayScore(int score) 
 {
     if (score < 0 || score > 9999) 
         return;
 
+    // each digit at a time
     displayNum(0, score / 1000);
     displayNum(1, (score / 100) % 10);
     displayNum(2, (score / 10) % 10);
@@ -106,15 +120,17 @@ void startGame()
 
 void setup() 
 {
+  // configure sensor pins
   for(int i = 0; i < ULTRASONIC_SENSORS; i++)
   {
     pinMode(skeeballSensors[i].triggerPin, OUTPUT);
     pinMode(skeeballSensors[i].echoPin, INPUT);
   }
 
-  matrix.begin();  // Initialize the matrix
-  matrix.control(MD_MAX72XX::INTENSITY, 1);  // Set brightness level (0-15)
-  matrix.clear();  // Clear the display
+  // led matrix setup
+  matrix.begin();
+  matrix.control(MD_MAX72XX::INTENSITY, LED_BRIGHTNESS);
+  matrix.clear();
   matrix.update();
 
   startGame();
@@ -122,6 +138,7 @@ void setup()
 
 void loop() 
 {
+  // game over handling
   if (balls <= 0 && gameOverCount > 0)
   {
     displayScore(score);
@@ -135,16 +152,18 @@ void loop()
 
     gameOverCount--;
 
+    // if we've shown enough then restart game
     if (gameOverCount <= 0)
       startGame();
   }
   else 
   {
+    // cycle through all sensors
     for (int i=0; i < ULTRASONIC_SENSORS; i++)
     {
       if (millis() > skeeballSensors[i].nextDetect)
       {
-        // Trigger pulse
+        // trigger pulse
         digitalWrite(skeeballSensors[i].triggerPin, LOW);
         delayMicroseconds(2);
 
@@ -153,19 +172,22 @@ void loop()
 
         digitalWrite(skeeballSensors[i].triggerPin, LOW);
 
-        // Measure echo time
-        int duration = pulseIn(skeeballSensors[i].echoPin, HIGH);
-        
-        // Calculate distance in cm
-        int distance = (duration / 2) / 29.1;
+        // calculate distance in cm
+        int distance = (pulseIn(skeeballSensors[i].echoPin, HIGH) / 2) / 29.1;
 
         if (distance >= skeeballSensors[i].lowDetectRange && distance <= skeeballSensors[i].highDetectRange)
         {
+          // add and display score
           score += skeeballSensors[i].points;
           displayScore(score);
+
+          // one less ball
           balls--;
+
+          // wait a second before we can count this sensor as points
           skeeballSensors[i].nextDetect = millis() + 1000;
 
+          // if it's our last ball then game is over
           if (balls <= 0)
             gameOverCount = 5;
         }
