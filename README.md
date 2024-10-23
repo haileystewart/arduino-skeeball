@@ -13,3 +13,7 @@ An interactive skeeball-inspired game using Arduino for sensors and lighting, an
 
 ## Game Play
 Players bounce ping pong balls into targets, scoring points tracked by the Raspberry Pi. Sound and light effects trigger when targets are hit.
+
+https://www.instructables.com/Wooden-Skeeball-Game/
+https://www.instructables.com/Automatic-Scoring-for-a-Small-Skee-Ball-Game/
+https://www.instructables.com/Homemade-Skee-Ball-Game/
