@@ -6,18 +6,21 @@
 class Sensor 
 {
 public:
-    uint8_t triggerPin;
-    uint8_t echoPin;
-    int     points;
-    int     detectRange;
-    long    nextDetect;
+    uint8_t       triggerPin;
+    uint8_t       echoPin;
+    unsigned long detectRange;
+    int           points;
+    int           tone;
+    unsigned long nextDetect;
 
-    Sensor(uint8_t trigger, uint8_t echo, int pts, int detect): 
-      triggerPin(trigger), 
-      echoPin(echo),
-      points(pts),
-      detectRange(detect),
-      nextDetect(0){}
+    Sensor(uint8_t triggerPin, uint8_t echoPin, unsigned long detectRange, int points, int tone): 
+      triggerPin(triggerPin), 
+      echoPin(echoPin),
+      detectRange(detectRange),
+      points(points),
+      tone(tone),
+      nextDetect(0)
+      {}
 
     void setup();
     unsigned long getDistance();

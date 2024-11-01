@@ -1,177 +1,275 @@
-#include <Arduino.h>
-#include "ledMatrix.h"
+#include <MD_MAX72xx.h>
+#include <SPI.h>
 #include "sensor.h"
+#include "tone.h"
 
-// pin definition
-#define BUTTON_PIN  8
-#define SPEAKER_PIN 9
-#define CS_PIN      10
-#define DATA_PIN    11
-#define CLK_PIN     13
+// game defines
+#define ULTRASONIC_SENSORS  6
+#define DEBUG_SENSOR        -1
+#define WAIT_BETWEEN_BALLS  1000
+#define BUTTON_PIN          8
 
-LEDMatrix Display(DATA_PIN, CLK_PIN, CS_PIN);
+// led matrix definitions
+#define HARDWARE_TYPE       MD_MAX72XX::FC16_HW
+#define DATA_PIN            11
+#define CLK_PIN             13
+#define CS_PIN              10
+#define LED_MODULES         8   // there are 8 8x8 modules
+#define LED_BRIGHTNESS      1   // brightness level is 0..15
 
-#define ULTRASONIC_SENSORS 6
+MD_MAX72XX matrix = MD_MAX72XX(HARDWARE_TYPE, DATA_PIN, CLK_PIN, CS_PIN, LED_MODULES);
 
+Tone gameTone;
+
+int  score        = 0;
+int  highScore    = 0;
+int  balls        = 9;
+bool gameRunning  = false;
+int  cycle        = 0;
+int  cycleDelay   = 0;
+
+// list of ultrasonic sensors
 Sensor sensors[ULTRASONIC_SENSORS] =
 {
-  Sensor(A5, 2,  100, 300),
-  Sensor(A4, 3,   25, 550),
-  Sensor(A5, 2,  100, 300),
-  Sensor(A5, 2,  100, 300),
-  Sensor(A5, 2,  100, 300),
-  Sensor(A5, 2,  100, 300)
-//  { A3, 4, 300, 300 },
-//  { A2, 5, 400, 300 },
-//  { A1, 6, 500, 300 },
-//  { A0, 7, 600, 300 }
+  Sensor(A5, 2, 300, 25, 110),
+  Sensor(A4, 3, 300, 100, 220),
+  Sensor(A4, 3, 300, 100, 220),
+  Sensor(A4, 3, 300, 100, 220),
+  Sensor(A4, 3, 300, 100, 220),
+  Sensor(A4, 3, 300, 100, 220)
 };
 
-#define DELAY_BETWEEN_BALLS  1000
-
-const int melody[] = {262, 294, 330, 349};  // Notes (C4 to C5)
-const int bright[] = {15, 10, 6, 1};
-
-int currentNote = 0;
-unsigned long previousMillis = 0;
-const long interval = 100;  // Interval between notes
-
-int score         = 0;
-int highScore     = 0;
-int balls         = 9;
-int gameOverCount = 0;
-
-void startGame()
+// 0-9 character binary map
+const uint8_t numbers[10][8] = 
 {
-  noTone(SPEAKER_PIN);
+  {0b00000000, 0b01111111, 0b01000001, 0b01000001, 0b01000001, 0b01000001, 0b01111111, 0b00000000}, // 0
+  {0b00000000, 0b00000000, 0b01000000, 0b01000001, 0b01111111, 0b01000000, 0b01000000, 0b00000000}, // 1
+  {0b00000000, 0b01111001, 0b01001001, 0b01001001, 0b01001001, 0b01001001, 0b01001111, 0b00000000}, // 2
+  {0b00000000, 0b01001001, 0b01001001, 0b01001001, 0b01001001, 0b01001001, 0b01111111, 0b00000000}, // 3
+  {0b00000000, 0b00001111, 0b00001000, 0b00001000, 0b00001000, 0b00001000, 0b01111111, 0b00000000}, // 4
+  {0b00000000, 0b01001111, 0b01001001, 0b01001001, 0b01001001, 0b01001001, 0b01111001, 0b00000000}, // 5
+  {0b00000000, 0b01111111, 0b01001001, 0b01001001, 0b01001001, 0b01001001, 0b01111001, 0b00000000}, // 6
+  {0b00000000, 0b00000001, 0b00000001, 0b00000001, 0b00000001, 0b00000001, 0b01111111, 0b00000000}, // 7
+  {0b00000000, 0b01111111, 0b01001001, 0b01001001, 0b01001001, 0b01001001, 0b01111111, 0b00000000}, // 8
+  {0b00000000, 0b01001111, 0b01001001, 0b01001001, 0b01001001, 0b01001001, 0b01111111, 0b00000000}  // 9
+};
 
-  score         = 0;
-  balls         = 9;
-  gameOverCount = 0;
+// display 0-9 number at matrix position 0-7
+void displayNum(int position, int num)
+{
+  position = (position % 8) * 8;
 
-  Display.print("PINGPONG");
-  delay(500);
-
-  Display.print("TOSS    ");
-  delay(500);
-
-  Display.print("    TOSS");
-  delay(500);
-
-  Display.showScore(score);
+  for (int i = 0; i < 8; i++)
+    matrix.setColumn(63 - (position + i), numbers[num][i]);
 }
 
-void gameOver()
+// display character on led at position
+void displayChar(int position, char c, bool left=false) 
 {
-  if (score > highScore)
-    highScore = score;
+  uint8_t charBuffer[8];  // Buffer to hold the character columns
+  uint8_t width = matrix.getChar(c, sizeof(charBuffer), charBuffer);  // Retrieve the bitmap for the character
+  uint8_t start = left?62:30;
 
-  gameOver();
-  noTone(SPEAKER_PIN);
-
-  Display.print("GAME");
-  delay(500);
-
-  Display.print("OVER");
-  delay(500);
-
-  Display.showScore(score);
-  delay(1000);
-
-  Display.print("HIGH");
-  delay(500);
-
-  Display.showScore(highScore);
-  delay(1000);
-
-  gameOverCount--;
-
-  // if we've shown enough then restart game
-  if (gameOverCount <= 0)
-    startGame();
-}
-
-void gameLoop()
-{
-  // cycle through all sensors
-  for (int i=0; i < ULTRASONIC_SENSORS; i++)
+  for (int i = 0; i < 8; i++)
   {
-    // debounce logic
-    if (millis() > sensors[i].nextDetect)
+    uint8_t p = start - (position + i);
+    if (p >= 0 && p <= (start+1))
     {
-      unsigned long distance = sensors[i].getDistance();
-
-      if (i == 1)
-        Serial.println(distance);
-
-      if (distance <= sensors[i].detectRange)
-      {
-        previousMillis = millis() - interval;
-        currentNote = 0;
-
-        // add and display score
-        score += sensors[i].points;
-        Display.showScore(score);
-
-        // one less ball
-        balls--;
-
-        // wait before we can rescan this sensor)
-        sensors[i].nextDetect = millis() + DELAY_BETWEEN_BALLS;
-      }
+      uint8_t b = (i < width)?charBuffer[i]:0;
+      matrix.setColumn(p, b);
     }
   }
 }
 
-void soundLoop()
+void displayString(String data, bool left=false)
 {
-  unsigned long currentMillis = millis();
+  matrix.control(0, LED_MODULES-1, MD_MAX72XX::UPDATE, MD_MAX72XX::OFF);
 
-  if (previousMillis != 0 && currentMillis - previousMillis >= interval) 
+  uint8_t p = 0;
+  for(int i=0; i<data.length(); i++)
   {
-    previousMillis = currentMillis;
-
-    if (currentNote < sizeof(melody) / sizeof(melody[0])) 
-    {
-      Display.brightness(bright[currentNote]);
-
-      tone(SPEAKER_PIN, melody[currentNote], interval);
-      currentNote++;
-    }
-    else 
-    {
-      noTone(SPEAKER_PIN);
-      previousMillis = 0;
-      currentNote = 0;
-
-        // if it's our last ball then game is over
-        if (balls <= 0)
-          gameOverCount = 2;
-
-    }
+    displayChar(p,data[i], left);
+    p += 8;
   }
+
+  matrix.control(0, LED_MODULES-1, MD_MAX72XX::UPDATE, MD_MAX72XX::ON);
 }
 
-void setup()
+void displayScore(int s, int b = -1)
+{
+  matrix.control(0, LED_MODULES-1, MD_MAX72XX::UPDATE, MD_MAX72XX::OFF);
+
+  if (b >= 0)
+  {
+    // remaining balls
+    displayNum(1, (b / 10) % 10);
+    displayNum(2, b % 10);
+  }
+
+  // each digit at a time
+  displayNum(4, s / 1000);
+  displayNum(5, (s / 100) % 10);
+  displayNum(6, (s / 10) % 10);
+  displayNum(7, s % 10);
+
+  matrix.control(0, LED_MODULES-1, MD_MAX72XX::UPDATE, MD_MAX72XX::ON);
+}
+
+void setup() 
 {
   Serial.begin(115200);
   delay(500);
+
+  pinMode(BUTTON_PIN, INPUT_PULLUP);
 
   // configure sensor pins
   for(int i = 0; i < ULTRASONIC_SENSORS; i++)
     sensors[i].setup();
 
-  Display.begin();
-
-  startGame();
+  // led matrix setup
+  matrix.begin();
+  matrix.control(MD_MAX72XX::INTENSITY, LED_BRIGHTNESS);
+  matrix.clear();
+  matrix.update();
 }
 
 void loop() 
 {
-  if (balls > 0 || gameOverCount <= 0)
-    gameLoop();
-  else
-    gameOver();
+  if (gameRunning)
+  {
+    // cycle through all sensors
+    for (int i=0; i < ULTRASONIC_SENSORS; i++)
+    {
+      unsigned long currentMillis = millis();
 
-  soundLoop();
+      // debounce logic
+      if (currentMillis > sensors[i].nextDetect)
+      {
+        unsigned long distance = sensors[i].getDistance();
+
+        // write out to serial monitor sensor distance
+        if (i == DEBUG_SENSOR)
+          Serial.println(distance);
+
+        if (distance <= sensors[i].detectRange)
+        {
+          // wait before we can rescan this sensor)
+          for(int j=0;j<ULTRASONIC_SENSORS;j++)
+            if (sensors[j].triggerPin == sensors[i].triggerPin)
+              sensors[j].nextDetect = currentMillis + WAIT_BETWEEN_BALLS;
+
+          gameTone.setTone(sensors[i].tone);
+          
+          score += sensors[i].points;  // add and display score
+          balls--;  // one less ball
+
+          if (score > highScore)
+            highScore = score;
+
+          displayScore(score, balls);
+
+          // if it's our last ball then game is over
+          if (balls <= 0)
+          {
+            gameRunning = false;
+            cycle = 9;
+          }
+        }
+      }
+    }
+  }
+  else 
+  {
+    switch(cycle)
+    {
+      case 0:
+        displayString("PING    ", true);
+        cycleDelay = 500;
+        cycle++;
+        break;
+
+      case 1:
+        displayString("    PING", true);
+        cycleDelay = 500;
+        cycle++;
+        break;
+
+      case 2:
+        displayString("PONG    ", true);
+        cycleDelay = 500;
+        cycle++;
+        break;
+
+      case 3:
+        displayString("    PONG", true);
+        cycleDelay = 500;
+        cycle++;
+        break;
+
+      case 4:
+        displayString("TOSS    ", true);
+        cycleDelay = 500;
+        cycle++;
+        break;
+
+      case 5:
+        displayString("    TOSS", true);
+        cycleDelay = 500;
+        cycle++;
+        break;
+
+      case 6:
+        displayString("LAST", true);
+        displayScore(score);
+        cycleDelay = 1500;
+        cycle++;
+        break;
+
+      case 7:
+        displayString("HIGH", true);
+        displayScore(highScore);
+        cycleDelay = 1500;
+        cycle++;
+        break;
+
+      case 8:
+        displayString("PUSH-GO-", true);
+        cycleDelay = 2000;
+        cycle = 0;
+        break;
+
+      case 9:
+        displayString("GAMEOVER", true);
+        cycleDelay = 2000;
+        cycle = 6;
+        break;
+    }
+
+    bool pressed = false;
+    unsigned long expiry = millis() + cycleDelay;
+    while(millis() < expiry)
+    {
+      if (digitalRead(BUTTON_PIN) == LOW)
+      {
+        pressed = true;
+        break;
+      }
+
+      delay(10);
+    }
+
+    if (pressed)
+    {
+      gameTone.setTone(0);
+
+      score = 0;
+      balls = 9;
+      gameRunning = true;
+
+      displayString("-  -", true);
+      displayScore(score, balls);
+    }
+  }
+
+  gameTone.loop();
 }
