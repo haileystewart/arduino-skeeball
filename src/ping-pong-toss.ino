@@ -15,7 +15,7 @@
 #define CLK_PIN             13
 #define CS_PIN              10
 #define LED_MODULES         8   // there are 8 8x8 modules
-#define LED_BRIGHTNESS      1   // brightness level is 0..15
+#define LED_BRIGHTNESS      10  // brightness level is 0..15
 
 MD_MAX72XX matrix = MD_MAX72XX(HARDWARE_TYPE, DATA_PIN, CLK_PIN, CS_PIN, LED_MODULES);
 
@@ -31,12 +31,12 @@ int  cycleDelay   = 0;
 // list of ultrasonic sensors
 Sensor sensors[ULTRASONIC_SENSORS] =
 {
-  Sensor(A5, 2, 300, 25, 110),
-  Sensor(A4, 3, 300, 100, 220),
-  Sensor(A4, 3, 300, 100, 220),
-  Sensor(A4, 3, 300, 100, 220),
-  Sensor(A4, 3, 300, 100, 220),
-  Sensor(A4, 3, 300, 100, 220)
+  Sensor(A5, 2, 300, 100, 110),
+  Sensor(A4, 3, 300, 200, 220),
+  Sensor(A3, 4, 300, 400, 330),
+  Sensor(A2, 5, 300, 500, 440),
+  Sensor(A1, 6, 300, 1000, 660),
+  Sensor(A0, 7, 300, 1000, 660)
 };
 
 // 0-9 character binary map
